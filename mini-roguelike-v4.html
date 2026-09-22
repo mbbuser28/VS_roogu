@@ -8,12 +8,21 @@
 		})(window,document,'script','dataLayer');</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mini Roguelike - 1ファイルで動くローグライク v4</title>
+<title>Mini Roguelike - 1ファイルで動くローグライク v4 (改良版)</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:#0b0e14;color:#d7dae0;font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP",Meiryo,sans-serif;display:flex;justify-content:center;padding:22px 12px}
-  #wrap{display:flex;gap:14px;align-items:flex-start}
-  #mainCol{width:880px}
+  #wrap{
+  display:flex;
+  gap:14px;
+  align-items:flex-start;
+  flex-wrap: wrap;
+  max-width: 100%;
+  }
+  #mainCol{
+  width: auto; 
+  max-width: 100%;
+  }
   h1{font-size:19px;color:#ffd75e;letter-spacing:3px;margin-bottom:6px}
   .sub{font-size:12px;color:#8b93a3;margin-bottom:12px}
   #hud{display:flex;gap:16px;flex-wrap:wrap;align-items:center;background:#151a24;border:1px solid #2a3242;border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px}
@@ -27,7 +36,6 @@
 display:flex;
 align-items:flex-start;
 margin-top:8px;
-
 }
 #refPanel{
 margin-left:auto;
@@ -60,17 +68,11 @@ margin-left:auto;
   #refPanel .ref{display:block;white-space:nowrap}
   #refPanel b{font-family:ui-monospace,Menlo,monospace;font-size:12px;margin-right:3px}
  #sidePanel{
-
 width:340px;
-
 max-height:95vh;
-
 overflow-y:auto;
-
 position:sticky;
-
 top:14px;
-
 }
   #sidePanel .side-title{
     font-size:11px;
@@ -115,7 +117,7 @@ top:14px;
   }
   #help{margin-top:10px;font-size:12px;color:#8b93a3;line-height:1.9}
   kbd{background:#232a38;border:1px solid #3a4356;border-bottom-width:2px;border-radius:4px;padding:1px 6px;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#d7dae0}
-  /* ===== レベルアップ振り分けモーダル ===== */
+  
   #growthOverlay{
     display:none;
     position:fixed;
@@ -190,16 +192,9 @@ top:14px;
 </head>
 <body>
 <div id="wrap">
-
-
-
-
-
-
-
 <div id="mainCol">
   <h1>MINI ROGUELIKE</h1>
-  <div class="sub">1ファイルで動くミニ・ローグライク v4：レベルアップで好きなステータスを振り分けられる成長システム</div>
+  <div class="sub">1ファイルで動くミニ・ローグライク v4：強化・モンスターレベル強化版</div>
 
   <div id="hud">
     <span class="hi">HP <span id="hpbg"><span id="hpfill"></span></span> <span id="hptext">-</span></span>
@@ -210,6 +205,7 @@ top:14px;
     <span class="hi">ターン <span id="turntext">-</span></span>
     <span class="hi">金 <span id="goldtext">-</span></span>
     <span class="hi">スコア <span id="scoretext">-</span></span>
+    <span class="hi">敵Lv <span id="enemyLvText" style="color:#ffb45e;font-weight:bold;">1</span></span>
   </div>
 
   <canvas id="cv"></canvas>
@@ -218,9 +214,6 @@ top:14px;
 
   <div class="row">
     <button id="restart">もう一度遊ぶ（Rキー）</button>
-    <div id="refPanel">
-     
-    </div>
   </div>
 
   <div id="help">
@@ -247,40 +240,24 @@ top:14px;
   <div id="pendingTag" class="pending-tag" style="display:none">振り分けポイント +<span id="pendingTagNum">0</span></div>
 
 <div id="refPanel">
- <span class="ref-title">⚔ 攻撃方法（2種類）</span>
-      <span class="ref">① <b>移動時に踏む</b> ＝接触攻撃（前作の挙動）</span>
+ <span class="ref-title">⚔ 攻撃方法</span>
+      <span class="ref">① <b>移動時に踏む</b> ＝接触攻撃</span>
       <span class="ref">② <b>F / Space</b> で向き選択→<b>矢印/WASD</b> で斬る</span>
 
-      <span class="ref-title">⬆️ 振り分け成長</span>
-      <span class="ref">敵を倒すと <b>EXP→LvUP→振り分けP+1</b>。</span>
-      <span class="ref">Pが残っている間はゲームがロックされる。</span>
-      <span class="ref">キー <b>1</b>=HP / <b>2</b>=ATK / <b>3</b>=DEF。</span>
-
-      <span class="ref-title">👹 敵図鑑</span>
-      <span class="ref"><b style="color:#7ee07e">S</b>スライム：EXP 3／金 8</span>
-      <span class="ref"><b style="color:#e0c46e">B</b>コウモリ：EXP 5／金 12（1Tに2回動く）</span>
-      <span class="ref"><b style="color:#b3a89a">G</b>ゴーレム：EXP 12／金 25（3階〜）</span>
-      <span class="ref"><b style="color:#ff5252">D</b>ドラゴン：EXP 30／金 50＋🔥（5階〜）</span>
-
-      <span class="ref-title">🎒 拾える物</span>
-      <span class="ref"><b style="color:#ff6ea8">!</b>回復薬：HP +20</span>
-      <span class="ref"><b style="color:#9fb8ff">+</b>剣：攻撃力 +2</span>
-      <span class="ref"><b style="color:#9fcfff">]</b>盾：防御力 +1</span>
-      <span class="ref"><b style="color:#7fd4ff">&gt;</b>階段：次の階へ＆HP少し回復</span>
+      <span class="ref-title">🎒 拾えるアイテム</span>
+      <span class="ref"><b style="color:#ff6ea8">!</b>回復薬：HP +35 回復</span>
+      <span class="ref"><b style="color:#9fb8ff">+</b>名剣：攻撃力 +4</span>
+      <span class="ref"><b style="color:#9fcfff">]</b>盾：防御力 +3</span>
+      <span class="ref"><b style="color:#ffd75e">*</b>宝石：スコア +300pt</span>
+      <span class="ref"><b style="color:#7fd4ff">&gt;</b>階段：次の階へ＆HP回復</span>
 </div>
 
 </aside>
 </div>
 
-
-<!-- ↓ここへ移動 -->
-20
-
-
-<!-- レベルアップ振り分けモーダル -->
 <div id="growthOverlay">
   <div id="growthBox">
-    <div class="g-title">⬆️  LEVEL UP</div>
+    <div class="g-title">⬆️ LEVEL UP</div>
     <div class="g-sub">獲得した振り分けポイントを好きなステータスに投資</div>
     <div class="g-pp">残り <span id="growthPP">0</span> pt</div>
     <div id="growthChoices">
@@ -309,48 +286,27 @@ top:14px;
 
 <script>
 'use strict';
-// ============================================================================
-// v4 追加：LvUP時の「振り分け成長システム」
-//
-// 仕組み：
-//   1) checkLevelUp() は lv を進めて「振り分けポイント +1」を貯めるだけ
-//      （かつてはHP+10/ATK+2/DEF+1 を自動で配っていた）
-//   2) pendingPoints > 0 になると showGrowthModal() でモーダル表示
-//   3) モーダル表示中は growthMode=true で全入力（移動・攻撃・敵ターン）をブロック
-//   4) applyGrowth(idx) で 0=HP（+15 maxhp/hp両方）, 1=ATK(+2), 2=DEF(+2) を配る
-//   5) pendingPoints が 0 になれば自動で hideGrowthModal()→再開
-//
-// 設計理由：
-//   ・LvUP→自動配分は楽だが「初期HP重視 vs ゴーレム特化」みたいな戦略性が出ない
-//   ・職業訓練で習う「状態（state）を持たせて入力で分岐する」設計の練習にもなる
-// ============================================================================
 
 // ---------- 定数 ----------
-const W = 44, H = 26, TILE = 20, VIEW_R = 8, SPAWN_TRY = 60;
+const W = 80, H = 50, TILE = 16, VIEW_R = 10, SPAWN_TRY = 60;
 const T_WALL = 0, T_FLOOR = 1, T_STAIR = 2;
 
-// レベルアップ時の成長値（1ポイントあたりの伸び）
-const GROWTH = {
-  HP:  15,   // 最大HPと現在HPを同時に増やす
-  ATK: 2,    // 攻撃力
-  DEF: 2    // 防御力
-};
+const GROWTH = { HP: 15, ATK: 2, DEF: 2 };
 
 // ---------- 状態 ----------
 let map = [], explored = [], player = null;
 let enemies = [], items = [];
-let level = 1, turn = 0, gold = 0, kills = 0;
+let level = 1, turn = 0, gold = 0, kills = 0, bonusScore = 0;
+let enemyGlobalLevel = 1; // ターン経過による敵レベル
 let gameOver = false, overMsg = '';
 let descended = false;
 let aimMode = false;
-let pendingPoints = 0;        // 振り分けポイント（未配分）
-let growthMode = false;       // 振り分けモーダル表示中＝ロック状態
+let pendingPoints = 0;
+let growthMode = false;
 
-// ---------- レベル別必要EXP表 ----------
 const EXP_TABLE = [0, 20, 50, 91, 140, 200, 280, 380, 500, 650, 850, 1100, 1400];
 function expToLevelUp(p){ return EXP_TABLE[p.lv] || EXP_TABLE[EXP_TABLE.length - 1]; }
 
-// ---------- DOM ----------
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
 cv.width = W * TILE;
@@ -367,7 +323,7 @@ function inMap(x, y){ return x >= 0 && y >= 0 && x < W && y < H; }
 function adjacent(a, b){ return Math.abs(a.x - b.x) + Math.abs(a.y - b.y) === 1; }
 
 // ============================================================================
-// ① ダンジョン自動生成
+// ① ダンジョン生成
 // ============================================================================
 function buildRooms(m){
   const rooms = [];
@@ -412,11 +368,11 @@ function makeDungeon(){
 }
 
 // ============================================================================
-// ② ゲーム開始・階の生成
+// ② ゲームスタート
 // ============================================================================
 function startGame(){
-  player = { x:0, y:0, hp:90, maxhp:90, atk:8, def:3, lv:1, exp:0 };
-  level = 1; turn = 0; gold = 0; kills = 0;
+  player = { x:0, y:0, hp:100, maxhp:100, atk:8, def:3, lv:1, exp:0 };
+  level = 1; turn = 0; gold = 0; kills = 0; bonusScore = 0; enemyGlobalLevel = 1;
   gameOver = false; overMsg = '';
   aimMode = false; aimTip.style.display = 'none';
   pendingPoints = 0;
@@ -424,16 +380,6 @@ function startGame(){
   growthOverlay.style.display = 'none';
   logEl.innerHTML = '';
   newFloor();
-
-  // 動作確認用の隠しフック：URLに ?grow=1 を付けると開始直後にポイント2を付与
-  const qs = new URLSearchParams(location.search);
-  if(qs.get('grow') === '1'){
-    player.lv = 2;
-    pendingPoints = 3;
-    addLog('🎉 動作確認：振り分けポイント3pt を所持してスタート');
-    showGrowthModal();
-  }
-
   updateHUD();
   draw();
 }
@@ -449,12 +395,15 @@ function newFloor(){
   const last = g.rooms[g.rooms.length - 1] || first;
   map[last.cy][last.cx] = T_STAIR;
 
-  const n = Math.min(5 + level, 13);
+  const n = Math.min(6 + level, 15);
   for(let i = 0; i < n; i++) spawnEnemy();
+  
+  // アイテム生成（各種追加）
   const pot = 1 + (Math.random() * 2 | 0);
   for(let i = 0; i < pot; i++) spawnItem('potion');
-  if(Math.random() < 0.6) spawnItem('sword');
-  if(Math.random() < 0.3) spawnItem('shield');
+  if(Math.random() < 0.7) spawnItem('sword');
+  if(Math.random() < 0.5) spawnItem('shield');
+  if(Math.random() < 0.6) spawnItem('gem'); // 点数アップ用宝石
 
   addLog('--- 地下' + level + '階 ---');
   addLog('階段「>」を目指して進め！');
@@ -463,26 +412,27 @@ function newFloor(){
 function descend(){
   descended = true;
   level++;
-  player.hp = Math.min(player.maxhp, player.hp + 5);
+  player.hp = Math.min(player.maxhp, player.hp + 15);
   newFloor();
-  addLog('次の階へ降りた（HP +5）');
+  addLog('次の階へ降りた（HP +15回復）');
 }
 
 // ============================================================================
-// ③ 敵とアイテムの生成
+// ③ 敵とアイテムの定義
 // ============================================================================
 const ENEMY_DATA = {
-  S: { name:'スライム', hp:10 + (level-1)*2, atk:4 + (level-1), gold:8,  exp:3,  desc:'弱い基本敵' },
-  B: { name:'コウモリ', hp:7  + (level-1)*2, atk:3 + (level-1), gold:12, exp:5,  desc:'素早い（1Tに2回動く）' },
-  GOB: { name:'ゴブリン', hp:14 + (level-1)*2, atk:5 + (level-1), gold:18, exp:8,  desc:'ちょっと強い雑魚（2階〜）' }, // ★追加
-  G: { name:'ゴーレム', hp:22 + (level-1)*3, atk:7 + (level-1), gold:25, exp:12, desc:'硬い強敵（3階〜）' },
-  D: { name:'ドラゴン', hp:30 + (level-1)*6, atk:9 + (level-1)*2, gold:50, exp:30, desc:'火炎ブレス（5階〜）' }
+  S: { name:'スライム', hp:10, atk:4, gold:8, exp:3 },
+  B: { name:'コウモリ', hp:7, atk:3, gold:12, exp:5 },
+  GOB: { name:'ゴブリン', hp:14, atk:5, gold:18, exp:8 },
+  G: { name:'ゴーレム', hp:22, atk:7, gold:25, exp:12 },
+  D: { name:'ドラゴン', hp:30, atk:9, gold:50, exp:30 }
 };
+
 function pickEnemyType(){
   const r = Math.random();
   if(level >= 5 && r < 0.18) return 'D';
   if(level >= 3 && r < 0.40) return 'G';
-  if(level >= 2 && r < 0.60) return 'GOB'; // ★追加（2階以上で出現）
+  if(level >= 2 && r < 0.60) return 'GOB';
   if(r < 0.70) return 'S';
   return 'B';
 }
@@ -490,14 +440,19 @@ function pickEnemyType(){
 function makeEnemy(x, y){
   const type = pickEnemyType();
   const d = ENEMY_DATA[type];
-  return { x, y, type, name:d.name, hp:d.hp, maxhp:d.hp, atk:d.atk, gold:d.gold, exp:d.exp, alive:true };
+  // ターン経過による敵Lvの上昇補正を計算
+  const lvlBonus = (enemyGlobalLevel - 1);
+  const baseHp = d.hp + (level - 1) * 2 + lvlBonus * 3;
+  const baseAtk = d.atk + (level - 1) + lvlBonus * 1;
+
+  return { x, y, type, name:d.name, hp:baseHp, maxhp:baseHp, atk:baseAtk, gold:d.gold, exp:d.exp, alive:true };
 }
 
 function spawnEnemy(){
   for(let i = 0; i < SPAWN_TRY; i++){
     const x = Math.random() * W | 0, y = Math.random() * H | 0;
     if(map[y][x] !== T_FLOOR) continue;
-    if(Math.abs(x - player.x) + Math.abs(y - player.y) < 8) continue;
+    if(Math.abs(x - player.x) + Math.abs(y - player.y) < 6) continue;
     if(enemies.some(e => e.x === x && e.y === y)) continue;
     if(items.some(it => it.x === x && it.y === y)) continue;
     enemies.push(makeEnemy(x, y));
@@ -509,7 +464,7 @@ function spawnItem(kind){
   for(let i = 0; i < SPAWN_TRY; i++){
     const x = Math.random() * W | 0, y = Math.random() * H | 0;
     if(map[y][x] !== T_FLOOR) continue;
-    if(Math.abs(x - player.x) + Math.abs(y - player.y) < 5) continue;
+    if(Math.abs(x - player.x) + Math.abs(y - player.y) < 4) continue;
     if(items.some(it => it.x === x && it.y === y)) continue;
     if(enemies.some(e => e.x === x && e.y === y)) continue;
     items.push({ x, y, kind });
@@ -518,7 +473,7 @@ function spawnItem(kind){
 }
 
 // ============================================================================
-// ④ 視界（フォグ・オブ・ウォー）
+// ④ 視界
 // ============================================================================
 function hasLOS(x0, y0, x1, y1){
   let dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
@@ -530,7 +485,7 @@ function hasLOS(x0, y0, x1, y1){
     if(!(x === x0 && y === y0) && map[y][x] === T_WALL) return false;
     const e2 = 2 * err;
     if(e2 > -dy){ err -= dy; x += sx; }
-    if(e2 <  dx){ err += dx; y += sy; }
+    if(e2 < dx){ err += dx; y += sy; }
   }
 }
 
@@ -567,7 +522,7 @@ function attackEnemy(e){
     kills++;
     gold += e.gold;
     player.exp += e.exp;
-    addLog(e.name + 'を倒した！ 金貨' + e.gold + '／EXP+' + e.exp);
+    addLog(e.name + 'を倒した！ 金貨+' + e.gold + '／EXP+' + e.exp);
     checkLevelUp();
   }
   return true;
@@ -577,21 +532,12 @@ function attackInDirection(dx, dy){
   const nx = player.x + dx, ny = player.y + dy;
   if(!inMap(nx, ny)) return false;
   const e = enemies.find(o => o.x === nx && o.y === ny);
-  if(e){
-    attackEnemy(e);
-    return true;
-  }
+  if(e){ attackEnemy(e); return true; }
   if(map[ny][nx] === T_WALL){ addLog('壁を斬った（空振り）'); return true; }
   addLog('その方向には誰もいない（空振り）');
   return true;
 }
 
-/**
- * LvUP判定 — v4で変更：
- *   自動配分を止め、lv++ + pendingPoints++ だけしてモーダルを開く。
- *   applyGrowth() は HTML 1/2/3 key click から呼ばれる。
- *   複数レベル同時到達時は pendingPoints が増えるだけ（配るのは人間側）。
- */
 function checkLevelUp(){
   let leveled = 0;
   while(player.exp >= expToLevelUp(player) && player.lv < EXP_TABLE.length - 1){
@@ -606,9 +552,6 @@ function checkLevelUp(){
   if(pendingPoints > 0) showGrowthModal();
 }
 
-// ============================================================================
-// ⑥ 振り分けモーダル：表示 / 反映 / 閉じる
-// ============================================================================
 function showGrowthModal(){
   growthMode = true;
   refreshGrowthModal();
@@ -622,7 +565,6 @@ function hideGrowthModal(){
   draw();
 }
 
-// モーダル内の数字を最新状態に同期（毎ターン / キー押下毎に呼ぶ）
 function refreshGrowthModal(){
   $('growthPP').textContent = pendingPoints;
   $('gHpNow').textContent  = player.maxhp;
@@ -635,32 +577,24 @@ function refreshGrowthModal(){
   $('pendingQuickNum').textContent = pendingPoints;
 }
 
-/**
- * 0=HP, 1=ATK, 2=DEF のどれかを配る。pendingPointsを1減らし、0なら閉じる。
- * HPは maxhp と現在 hp を **同時に** 増やす（バグりやすいポイントなので要注意）。
- */
 function applyGrowth(idx){
   if(pendingPoints <= 0) return;
   if(idx === 0){
     player.maxhp += GROWTH.HP;
-    player.hp    += GROWTH.HP;   // 現在HPも同時に回復
-    addLog('⬆️ HP+' + GROWTH.HP + '振り分け！（' + player.hp + '/' + player.maxhp + '）');
+    player.hp    += GROWTH.HP;
+    addLog('⬆️ HP+' + GROWTH.HP + ' 振り分け！（' + player.hp + '/' + player.maxhp + '）');
   } else if(idx === 1){
     player.atk += GROWTH.ATK;
-    addLog('⬆️ 攻撃+' + GROWTH.ATK + '振り分け！（現在攻' + player.atk + '）');
+    addLog('⬆️ 攻撃+' + GROWTH.ATK + ' 振り分け！（現在攻' + player.atk + '）');
   } else if(idx === 2){
     player.def += GROWTH.DEF;
-    addLog('⬆️ 防御+' + GROWTH.DEF + '振り分け！（現在防' + player.def + '）');
+    addLog('⬆️ 防御+' + GROWTH.DEF + ' 振り分け！（現在防' + player.def + '）');
   }
   pendingPoints--;
-  // 連続LvUP(例：大量EXPで2回同時到達)ならモーダルを更新して残し表示
-  // まだ経験が余っていて追加LvUPがある場合：
-  if(player.exp >= expToLevelUp(player)){
-    checkLevelUp();
-  }
+  if(player.exp >= expToLevelUp(player)) checkLevelUp();
+  
   if(pendingPoints > 0){
     refreshGrowthModal();
-    addLog('残り ' + pendingPoints + ' pt を振り分けまだ！');
   } else {
     addLog('振り分け完了。冒険再開。');
     hideGrowthModal();
@@ -668,7 +602,6 @@ function applyGrowth(idx){
   updateHUD();
 }
 
-// モーダルの選択肢クリックでも同じ結果
 document.querySelectorAll('.g-choice').forEach(el => {
   el.addEventListener('click', () => {
     if(!growthMode) return;
@@ -676,23 +609,27 @@ document.querySelectorAll('.g-choice').forEach(el => {
   });
 });
 
+// アイテム取得
 function pickup(it, idx){
   if(it.kind === 'potion'){
-    const heal = 20;
+    const heal = 35;
     player.hp = Math.min(player.maxhp, player.hp + heal);
-    addLog('回復薬を使った（HP +' + heal + '）');
+    addLog('❤️ 回復薬を使用！（HP +' + heal + '）');
   } else if(it.kind === 'sword'){
     player.atk += 4;
-    addLog('剣を手に入れた！ 攻撃力 +4（現在' + player.atk + '）');
+    addLog('⚔️ 名剣を手に入れた！ 攻撃力 +4');
   } else if(it.kind === 'shield'){
     player.def += 3;
-    addLog('盾を手に入れた！ 防御力 +3（現在' + player.def + '）');
+    addLog('🛡️ 盾を手に入れた！ 防御力 +3');
+  } else if(it.kind === 'gem'){
+    bonusScore += 300;
+    addLog('💎 貴重な宝石を拾った！（スコア +300pt）');
   }
   items.splice(idx, 1);
 }
 
 // ============================================================================
-// ⑦ プレイヤーの行動
+// ⑥ プレイヤー移動
 // ============================================================================
 function playerMove(dx, dy){
   const nx = player.x + dx, ny = player.y + dy;
@@ -709,7 +646,7 @@ function playerMove(dx, dy){
 }
 
 // ============================================================================
-// ⑧ 敵AI
+// ⑦ 敵AI（停止・詰まり対策を強化したBFS）
 // ============================================================================
 function bfsNext(sx, sy, tx, ty){
   const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
@@ -718,16 +655,19 @@ function bfsNext(sx, sy, tx, ty){
   const prev = new Map();
   const q = [[sx, sy]];
   let head = 0;
+  
   while(head < q.length){
     const c = q[head++];
     const ck = c[0] + ',' + c[1];
     if(ck === goalKey) break;
     const d = dist.get(ck);
-    if(d >= 14) continue;
+    if(d >= 20) continue; // 追跡範囲
+    
     for(const [dx, dy] of dirs){
       const nx = c[0] + dx, ny = c[1] + dy;
       if(!inMap(nx, ny)) continue;
       if(map[ny][nx] === T_WALL) continue;
+      
       const nk = nx + ',' + ny;
       if(dist.has(nk)) continue;
       dist.set(nk, d + 1);
@@ -748,15 +688,15 @@ function enemyTurn(){
     const steps = (e.type === 'B') ? 2 : 1;
     for(let s = 0; s < steps; s++){
       if(gameOver) return;
-      const dist = Math.abs(e.x - player.x) + Math.abs(e.y - player.y);
-      if(dist > 10) break;
       if(adjacent(e, player)){ attackPlayer(e); break; }
+      
       const step = bfsNext(e.x, e.y, player.x, player.y);
       if(!step) break;
       const nx = e.x + step[0], ny = e.y + step[1];
       if(nx === player.x && ny === player.y){ attackPlayer(e); break; }
       if(map[ny][nx] === T_WALL) break;
-      if(enemies.some(o => o !== e && o.x === nx && o.y === ny)) break;
+      // 他の敵がいる場合は迂回を試みずにその場で待機
+      if(enemies.some(o => o !== e && o.alive && o.x === nx && o.y === ny)) break;
       e.x = nx; e.y = ny;
     }
   }
@@ -766,9 +706,9 @@ function enemyTurn(){
 function attackPlayer(e){
   const dmg = calcDmg(e.atk, player.def);
   player.hp -= dmg;
-  addLog(e.name + 'に攻撃された！ ' + dmg + 'ダメージ');
+  addLog(e.name + 'の攻撃！ ' + dmg + 'ダメージ');
   if(e.type === 'D' && Math.random() < 0.45){
-    const extra = 4 + (Math.random() * 4 | 0);
+    const extra = 5 + (Math.random() * 5 | 0);
     player.hp -= Math.max(1, extra - Math.floor(player.def / 2));
     addLog('🔥 ドラゴンの火炎！');
   }
@@ -780,7 +720,7 @@ function attackPlayer(e){
 }
 
 // ============================================================================
-// ⑨ 描画
+// ⑧ 描画
 // ============================================================================
 function draw(){
   const vis = visibleSet();
@@ -801,14 +741,16 @@ function draw(){
   }
   for(const it of items){
     if(vis.has(it.x + ',' + it.y)){
-      const ch  = it.kind === 'potion' ? '!' : it.kind === 'sword' ? '+' : ']';
-      const col = it.kind === 'potion' ? '#ff6ea8' : it.kind === 'sword' ? '#9fb8ff' : '#9fcfff';
+      let ch = '!', col = '#ff6ea8';
+      if(it.kind === 'sword'){ ch = '+'; col = '#9fb8ff'; }
+      if(it.kind === 'shield'){ ch = ']'; col = '#9fcfff'; }
+      if(it.kind === 'gem'){ ch = '*'; col = '#ffd75e'; }
       drawChar(ch, col, it.x, it.y);
     }
   }
- const colors = { S:'#7ee07e', B:'#e0c46e', GOB:'#4caf50', G:'#b3a89a', D:'#ff5252' }; // ★ GOB を追加
+  const colors = { S:'#7ee07e', B:'#e0c46e', GOB:'#4caf50', G:'#b3a89a', D:'#ff5252' };
   for(const e of enemies){
-    if(e.alive && vis.has(e.x + ',' + e.y)) drawChar(e.type, colors[e.type], e.x, e.y);
+    if(e.alive && vis.has(e.x + ',' + e.y)) drawChar(e.type === 'GOB' ? 'G' : e.type[0], colors[e.type], e.x, e.y);
   }
   if(aimMode){
     const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
@@ -826,7 +768,7 @@ function draw(){
       }
     }
   }
-  drawChar('⚔️', '#ffd75e', player.x, player.y);
+  drawChar('@', '#ffd75e', player.x, player.y);
 
   if(gameOver){
     ctx.fillStyle = 'rgba(0,0,0,0.75)';
@@ -851,10 +793,10 @@ function drawChar(ch, color, x, y){
 }
 
 // ============================================================================
-// ⑩ HUD・ログ・スコア
+// ⑨ HUD & ログ
 // ============================================================================
 function score(){
-  return gold * 10 + kills * 5 + (level - 1) * 100 + player.lv * 50;
+  return gold * 10 + kills * 5 + (level - 1) * 100 + player.lv * 50 + bonusScore;
 }
 
 function updateHUD(){
@@ -864,11 +806,12 @@ function updateHUD(){
   $('expfill').style.width = Math.min(100, (player.exp / need) * 100) + '%';
   $('exptext').textContent = player.exp + ' / ' + need;
   $('lvNumQuick').textContent = player.lv;
-  $//('atktext').textContent = player.atk;
   $('lvtext').textContent = level;
   $('turntext').textContent = turn;
   $('goldtext').textContent = gold;
   $('scoretext').textContent = score();
+  $('enemyLvText').textContent = enemyGlobalLevel;
+  
   $('hptext2').textContent = player.hp + ' / ' + player.maxhp;
   $('hpFillBar').style.width = (Math.max(0, player.hp / player.maxhp) * 100) + '%';
   $('exptext2').textContent = player.exp + ' / ' + need;
@@ -876,8 +819,8 @@ function updateHUD(){
   $('lvtext2').textContent = player.lv;
   $('atktext2').textContent = player.atk;
   $('deftext2').textContent = player.def;
+  
   aimTip.style.display = aimMode && !growthMode ? 'block' : 'none';
-  // 振り分けポイント表示
   const hasP = pendingPoints > 0;
   pendingQuick.style.display = hasP ? 'inline-block' : 'none';
   pendingTag.style.display  = hasP ? 'block' : 'none';
@@ -895,34 +838,45 @@ function addLog(msg){
 }
 
 // ============================================================================
-// ⑪ 入力処理（growthMode中は 1/2/3 だけ受け付ける完全ロック）
+// ⑩ ターン終了処理 & キー入力
 // ============================================================================
+function endTurn(){
+  if(gameOver || growthMode) return;
+  if(!gameOver && !descended) enemyTurn();
+  turn++;
+
+  // 30ターンごとにモンスターのレベルが1上昇
+  if(turn > 0 && turn % 30 === 0){
+    enemyGlobalLevel++;
+    addLog('⚠️ ターン経過により【敵全体のレベルが Lv' + enemyGlobalLevel + '】に上がった！');
+    // 現存する敵の攻撃力と最大HPを強化
+    for(const e of enemies){
+      e.atk += 1;
+      e.maxhp += 3;
+      e.hp += 3;
+    }
+  }
+
+  updateHUD();
+  draw();
+}
+
 const DIRS = {
   ArrowUp:[0,-1], ArrowDown:[0,1], ArrowLeft:[-1,0], ArrowRight:[1,0],
   w:[0,-1], s:[0,1], a:[-1,0], d:[1,0],
   W:[0,-1], S:[0,1], A:[-1,0], D:[1,0]
 };
 
-function endTurn(){
-  if(gameOver || growthMode) return;   // growthMode中は敵ターンも進めない
-  if(!gameOver && !descended) enemyTurn();
-  turn++;
-  updateHUD();
-  draw();
-}
-
 document.addEventListener('keydown', e => {
   if(e.ctrlKey || e.metaKey || e.altKey) return;
 
-  // ▼ 振り分けモーダル表示中：1/2/3 だけ処理して、他は全て握り潰す
   if(growthMode){
     e.preventDefault();
-    if(e.key === '1' || e.key === 'h' || e.key === 'H'){ applyGrowth(0); return; }
-    if(e.key === '2' || e.key === 'a' || e.key === 'A'){ applyGrowth(1); return; }
-    if(e.key === '3' || e.key === 'd' || e.key === 'D'){ applyGrowth(2); return; }
-    // Esc/R は モーダル中も有効です（R は再スタートを受けてゲーム性も即終了にする想定）
-    if(e.key === 'r' || e.key === 'R'){ startGame(); return; }
-    return;  // それ以外のキー（移動・Space・矢印）は全部ロック
+    if(e.key === '1') applyGrowth(0);
+    if(e.key === '2') applyGrowth(1);
+    if(e.key === '3') applyGrowth(2);
+    if(e.key === 'r' || e.key === 'R') startGame();
+    return;
   }
 
   if(e.key === 'r' || e.key === 'R'){ startGame(); return; }
@@ -937,7 +891,7 @@ document.addEventListener('keydown', e => {
       return;
     }
     const d = DIRS[e.key];
-    if(!d){ return; }
+    if(!d) return;
     aimMode = false;
     const acted = attackInDirection(d[0], d[1]);
     if(!acted) return;
@@ -970,6 +924,5 @@ restartBtn.addEventListener('click', startGame);
 
 startGame();
 </script>
-<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"4edd5f8ec12a48cfa682ab8261b80a79"}' crossorigin="anonymous"></script>
 </body>
 </html>
