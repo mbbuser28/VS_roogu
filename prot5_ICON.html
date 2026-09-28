@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Mini Roguelike - 巨大マップ版</title>
+  <style>
+    body {
+      background-color: #121212;
+      color: #e0e0e0;
+      font-family: 'Courier New', Courier, monospace, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+      font-size: 24px;
+      color: #ffffff;
+      text-shadow: 0 0 5px rgba(255, 255, 255, 0.2);
+    }
+
+    .game-container {
+      display: flex;
+      gap: 20px;
+      background-color: #1e1e1e;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    }
+
+    /* 拡大したキャンバス (600x600) */
+    #stage {
+      background-color: #000;
+      border: 2px solid #444;
+      border-radius: 4px;
+      image-rendering: pixelated;
+    }
+
+    /* サイドバーUI */
+    .sidebar {
+      width: 220px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .panel {
+      background-color: #2a2a2a;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 12px;
+    }
+
+    .panel h2 {
+      font-size: 14px;
+      margin-top: 0;
+      margin-bottom: 8px;
+      color: #88c0d0;
+      border-bottom: 1px solid #444;
+      padding-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stat-line {
+      font-size: 13px;
+      margin: 4px 0;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* 周囲のモンスターリスト */
+    #monster-list {
+      max-height: 420px;
+      overflow-y: auto;
+      font-size: 12px;
+    }
+
+    .monster-item {
+      padding: 6px;
+      margin-bottom: 6px;
+      background-color: #333;
+      border-radius: 4px;
+      border-left: 4px solid #888;
+    }
+
+    .monster-item.slime { border-left-color: #3b82f6; }
+    .monster-item.goblin { border-left-color: #22c55e; }
+    .monster-item.orc { border-left-color: #ef4444; }
+
+    .monster-name {
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-bottom: 2px;
+    }
+
+    .monster-stats {
+      color: #aaa;
+      font-size: 11px;
+    }
+
+    /* アクションログ */
+    #log {
+      width: 855px;
+      height: 90px;
+      background-color: #0d0d0d;
+      border: 1px solid #333;
+      border-radius: 4px;
+      margin-top: 15px;
+      padding: 8px;
+      font-size: 12px;
+      color: #ccc;
+      overflow-y: auto;
+      box-sizing: border-box;
+    }
+
+    .controls-hint {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #777;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Mini Roguelike</h1>
+
+  <div class="game-container">
+    <!-- メインマップ (600x600) -->
+    <canvas id="stage" width="600" height="600"></canvas>
+
+    <!-- サイドパネル -->
+    <div class="sidebar">
+      <!-- プレイヤー情報 -->
+      <div class="panel">
+        <h2>🚶 プレイヤー</h2>
+        <div class="stat-line"><span>HP:</span><span id="hp-val">30 / 30</span></div>
+        <div class="stat-line"><span>攻撃力:</span><span id="atk-val">8</span></div>
+        <div class="stat-line"><span>階層:</span><span id="floor-val">1 F</span></div>
+        <div class="stat-line"><span>スコア:</span><span id="score-val">0</span></div>
+      </div>
+
+      <!-- 周囲のモンスター情報 -->
+      <div class="panel">
+        <h2>👾 周囲のモンスター</h2>
+        <div id="monster-list">
+          <div style="color: #666;">（周囲に敵はいません）</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- アクションログ -->
+  <div id="log">ダンジョンに入った！ (操作: 矢印キー / WASD)</div>
+  <div class="controls-hint">操作: 矢印キー または WASD で移動 / 攻撃</div>
+
+  <script>
+    const CANVAS_SIZE = 600;
+    const GRID_SIZE = 30; // 30x30マスに拡張！
+    const TILE_SIZE = CANVAS_SIZE / GRID_SIZE; // 1マス20px
+
+    const TILE_WALL = 0;
+    const TILE_FLOOR = 1;
+    const TILE_STAIRS = 2;
+
+    const canvas = document.getElementById('stage');
+    const ctx = canvas.getContext('2d');
+
+    // プレイヤー
+    let player = {
+      x: 0,
+      y: 0,
+      icon: '🚶',
+      hp: 30,
+      maxHp: 30,
+      atk: 8,
+      score: 0,
+      floor: 1
+    };
+
+    let map = [];
+    let monsters = [];
+
+    // モンスター定義
+    const MONSTER_TYPES = {
+      SLIME:  { name: 'スライム', icon: '💧', color: '#3b82f6', hp: 8,  atk: 2, exp: 10, class: 'slime' },
+      GOBLIN: { name: 'ゴブリン', icon: '🟢', color: '#22c55e', hp: 12, atk: 4, exp: 20, class: 'goblin' },
+      ORC:    { name: 'オーク',   icon: '👹', color: '#ef4444', hp: 20, atk: 6, exp: 40, class: 'orc' }
+    };
+
+    function initGame() {
+      generateComplexMap();
+      spawnEntities();
+      draw();
+      updateUI();
+    }
+
+    // 広大な入り組んだマップを生成
+    function generateComplexMap() {
+      map = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(TILE_WALL));
+
+      let rooms = [];
+      const numRooms = 10; // 広いマップに合わせて部屋数を増加
+
+      for (let i = 0; i < numRooms; i++) {
+        let w = Math.floor(Math.random() * 4) + 3; // 幅 3~6
+        let h = Math.floor(Math.random() * 4) + 3; // 高さ 3~6
+        let x = Math.floor(Math.random() * (GRID_SIZE - w - 2)) + 1;
+        let y = Math.floor(Math.random() * (GRID_SIZE - h - 2)) + 1;
+
+        for (let rx = x; rx < x + w; rx++) {
+          for (let ry = y; ry < y + h; ry++) {
+            map[ry][rx] = TILE_FLOOR;
+          }
+        }
+        rooms.push({ x: Math.floor(x + w / 2), y: Math.floor(y + h / 2) });
+      }
+
+      // クランク状の通路で部屋を接続
+      for (let i = 0; i < rooms.length - 1; i++) {
+        let start = rooms[i];
+        let end = rooms[i + 1];
+
+        let cx = start.x;
+        let cy = start.y;
+
+        while (cx !== end.x || cy !== end.y) {
+          if (Math.random() < 0.5 && cx !== end.x) {
+            cx += (end.x > cx) ? 1 : -1;
+          } else if (cy !== end.y) {
+            cy += (end.y > cy) ? 1 : -1;
+          }
+          map[cy][cx] = TILE_FLOOR;
+        }
+      }
+
+      let lastRoom = rooms[rooms.length - 1];
+      map[lastRoom.y][lastRoom.x] = TILE_STAIRS;
+    }
+
+    function spawnEntities() {
+      let emptyTiles = [];
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          if (map[y][x] === TILE_FLOOR) {
+            emptyTiles.push({ x, y });
+          }
+        }
+      }
+
+      const popRandomTile = () => {
+        let idx = Math.floor(Math.random() * emptyTiles.length);
+        return emptyTiles.splice(idx, 1)[0];
+      };
+
+      let pPos = popRandomTile();
+      player.x = pPos.x;
+      player.y = pPos.y;
+
+      monsters = [];
+      let monsterCount = Math.floor(Math.random() * 7) + 8; // 8~14体に増加
+
+      for (let i = 0; i < monsterCount && emptyTiles.length > 0; i++) {
+        let mPos = popRandomTile();
+        let r = Math.random();
+        let type = MONSTER_TYPES.SLIME;
+        if (r > 0.4 && r <= 0.8) type = MONSTER_TYPES.GOBLIN;
+        if (r > 0.8) type = MONSTER_TYPES.ORC;
+
+        monsters.push({
+          x: mPos.x,
+          y: mPos.y,
+          ...type,
+          currentHp: type.hp
+        });
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+      // マップ描画
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          if (map[y][x] === TILE_WALL) {
+            ctx.fillStyle = '#2c2c3e';
+            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            ctx.strokeStyle = '#1a1a26';
+            ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+          } else if (map[y][x] === TILE_FLOOR) {
+            ctx.fillStyle = '#111118';
+            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+          } else if (map[y][x] === TILE_STAIRS) {
+            ctx.fillStyle = '#111118';
+            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            ctx.fillStyle = '#f1c40f';
+            ctx.font = '14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('🪜', (x + 0.5) * TILE_SIZE, (y + 0.5) * TILE_SIZE);
+          }
+        }
+      }
+
+      // モンスター描画
+      monsters.forEach(m => {
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(m.icon, (m.x + 0.5) * TILE_SIZE, (m.y + 0.5) * TILE_SIZE);
+      });
+
+      // プレイヤー描画 (🚶)
+      ctx.font = '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(player.icon, (player.x + 0.5) * TILE_SIZE, (player.y + 0.5) * TILE_SIZE);
+    }
+
+    function movePlayer(dx, dy) {
+      let nx = player.x + dx;
+      let ny = player.y + dy;
+
+      if (nx < 0 || nx >= GRID_SIZE || ny < 0 || ny >= GRID_SIZE || map[ny][nx] === TILE_WALL) {
+        return;
+      }
+
+      let targetIndex = monsters.findIndex(m => m.x === nx && m.y === ny);
+      if (targetIndex !== -1) {
+        let m = monsters[targetIndex];
+        m.currentHp -= player.atk;
+        log(`プレイヤーの攻撃！ ${m.name} に ${player.atk} のダメージ！`);
+
+        if (m.currentHp <= 0) {
+          log(`🎉 ${m.name} を倒した！ (+${m.exp}pt)`);
+          player.score += m.exp;
+          monsters.splice(targetIndex, 1);
+        }
+      } else {
+        player.x = nx;
+        player.y = ny;
+
+        if (map[ny][nx] === TILE_STAIRS) {
+          player.floor++;
+          log(`🪜 階段を下りて ${player.floor} 階へ進んだ。`);
+          generateComplexMap();
+          spawnEntities();
+          draw();
+          updateUI();
+          return;
+        }
+      }
+
+      moveMonsters();
+      draw();
+      updateUI();
+    }
+
+    function moveMonsters() {
+      monsters.forEach(m => {
+        let dx = Math.sign(player.x - m.x);
+        let dy = Math.sign(player.y - m.y);
+
+        if (Math.abs(player.x - m.x) + Math.abs(player.y - m.y) === 1) {
+          player.hp -= m.atk;
+          log(`💥 ${m.name} の攻撃！ ${m.atk} のダメージを受けた！`);
+          if (player.hp <= 0) {
+            player.hp = 0;
+            log(`💀 プレイヤーは倒れた… GAME OVER (スコア: ${player.score})`);
+          }
+          return;
+        }
+
+        let nextX = m.x + (Math.random() < 0.7 ? dx : 0);
+        let nextY = m.y + (Math.random() < 0.7 ? dy : 0);
+
+        if (
+          map[nextY][nextX] === TILE_FLOOR &&
+          !(nextX === player.x && nextY === player.y) &&
+          !monsters.some(other => other !== m && other.x === nextX && other.y === nextY)
+        ) {
+          m.x = nextX;
+          m.y = nextY;
+        }
+      });
+    }
+
+    function updateUI() {
+      document.getElementById('hp-val').textContent = `${player.hp} / ${player.maxHp}`;
+      document.getElementById('atk-val').textContent = player.atk;
+      document.getElementById('floor-val').textContent = `${player.floor} F`;
+      document.getElementById('score-val').textContent = player.score;
+
+      const monsterListEl = document.getElementById('monster-list');
+      monsterListEl.innerHTML = '';
+
+      // マンハッタン距離7以内を検知
+      let nearbyMonsters = monsters
+        .map(m => ({
+          ...m,
+          dist: Math.abs(player.x - m.x) + Math.abs(player.y - m.y)
+        }))
+        .filter(m => m.dist <= 7)
+        .sort((a, b) => a.dist - b.dist);
+
+      if (nearbyMonsters.length === 0) {
+        monsterListEl.innerHTML = '<div style="color: #666;">（周囲に敵はいません）</div>';
+      } else {
+        nearbyMonsters.forEach(m => {
+          let item = document.createElement('div');
+          item.className = `monster-item ${m.class}`;
+          item.innerHTML = `
+            <div class="monster-name"><span>${m.icon}</span> ${m.name}</div>
+            <div class="monster-stats">HP: ${m.currentHp} / ${m.hp} | 攻撃力: ${m.atk}</div>
+          `;
+          monsterListEl.appendChild(item);
+        });
+      }
+    }
+
+    function log(text) {
+      const logEl = document.getElementById('log');
+      logEl.innerHTML += `<br>${text}`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (player.hp <= 0) return;
+
+      switch (e.key) {
+        case 'ArrowUp':
+        case 'w':
+        case 'W':
+          movePlayer(0, -1);
+          break;
+        case 'ArrowDown':
+        case 's':
+        case 'S':
+          movePlayer(0, 1);
+          break;
+        case 'ArrowLeft':
+        case 'a':
+        case 'A':
+          movePlayer(-1, 0);
+          break;
+        case 'ArrowRight':
+        case 'd':
+        case 'D':
+          movePlayer(1, 0);
+          break;
+      }
+    });
+
+    initGame();
+  </script>
+</body>
+</html>
