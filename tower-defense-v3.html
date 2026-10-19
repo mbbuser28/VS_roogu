@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>タワーディフェンス v3</title>
+<style>
+  body {
+    margin: 0;
+    padding: 12px 16px 24px;
+    background: #1f2a2e;
+    color: #e8efe9;
+    font-family: system-ui, "Hiragino Sans", "Yu Gothic", sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  #scoreBox { text-align: center; line-height: 1.1; margin-bottom: 6px; }
+  #scoreLabel { font-size: 16px; color: #b8c4bc; }
+  #score {
+    font-size: 64px;
+    font-weight: 800;
+    color: #ffd75e;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 3px 0 #7a5a10;
+  }
+  #best { font-size: 15px; color: #b8c4bc; }
+
+  #hud {
+    display: flex; flex-wrap: wrap; justify-content: center;
+    gap: 6px 22px; margin-bottom: 8px; font-size: 17px;
+  }
+  #hud b { font-variant-numeric: tabular-nums; }
+
+  /* 関門のHP表示 */
+  #gates { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 20px; margin-bottom: 10px; }
+  .gate { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  .gate .bar { width: 120px; height: 10px; background: #111c1f; border-radius: 5px; overflow: hidden; }
+  .gate .fill { height: 100%; width: 100%; background: #7fd36b; }
+  .gate.down { opacity: 0.5; }
+  .gate.down .fill { background: #b8423a; }
+  .gate .ghp { font-variant-numeric: tabular-nums; min-width: 64px; }
+
+  /* ゲーム画面 + 補足パネル */
+  #main { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 12px; max-width: 100%; }
+  canvas {
+    background: #4d7a4a;
+    border: 2px solid #0f1517;
+    max-width: 100%;
+    height: auto;
+    cursor: pointer;
+  }
+  #info {
+    width: 270px;
+    background: #2a373c;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  #info h3 { font-size: 15px; margin: 0 0 6px; }
+  #info .row { display: flex; justify-content: space-between; gap: 8px; }
+  #info .row span { color: #b8c4bc; }
+  #info .note { color: #b8c4bc; margin-top: 4px; }
+  #info .item { padding: 8px 0; border-top: 1px solid #3b4a50; }
+  #info .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+  #infoTop { padding-bottom: 10px; margin-bottom: 4px; border-bottom: 2px solid #3b4a50; }
+
+  #toolbar, #controls { margin-top: 10px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  button {
+    font-size: 15px;
+    padding: 8px 12px;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    background: #3b4a50;
+    color: #e8efe9;
+    cursor: pointer;
+  }
+  button.active { border-color: #ffd75e; background: #50636b; }
+  button.poor { opacity: 0.5; }
+  button:disabled { background: #6b6f61; color: #aaa; cursor: not-allowed; }
+  button.main { background: #e0b341; color: #1f2a2e; font-size: 16px; padding: 8px 18px; }
+  button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+  #help { margin-top: 12px; font-size: 14px; color: #b8c4bc; max-width: 900px; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <div id="scoreBox">
+    <div id="scoreLabel">スコア</div>
+    <div id="score">0</div>
+    <div id="best">ベスト 0</div>
+  </div>
+
+  <div id="hud">
+    <span>お金: <b id="money">0</b>G</span>
+    <span>ウェーブ: <b id="wave">0</b></span>
+    <span>出現: <b id="spawned">-</b></span>
+    <span>場内の敵: <b id="alive">0</b></span>
+    <span>撃破数: <b id="kills">0</b></span>
+    <span>兵士: <b id="soldiers">0</b></span>
+  </div>
+
+  <div id="gates"></div>
+
+  <div id="main">
+    <canvas id="game" width="800" height="520"></canvas>
+    <aside id="info">
+      <div id="infoTop"></div>
+      <div id="infoEnemies"></div>
+    </aside>
+  </div>
+
+  <div id="toolbar"></div>
+
+  <div id="controls">
+    <button id="nextWave" class="main">次のウェーブを開始 (N)</button>
+    <button id="reset">最初からやり直す</button>
+  </div>
+
+  <p id="help">
+    ボタン（またはキー 1・2・3）でタワーを選び、草地をクリックして設置します。各タワーは 10 個までです。<br>
+    ミサイル（M）は選んでから敵をクリック。兵士（キー 4〜7）は出口から道を逆向きに歩き、敵とぶつかって戦います。<br>
+    敵は関門の前で止まって関門を攻撃します。最終関門が壊れるとゲームオーバーです。<br>
+    ボタンや画面上の敵・タワーにマウスを乗せると、右のパネルに詳しい情報が出ます。
+  </p>
+
+<script>
+// =====================================================
+//  設定値（ここをいじるとゲームバランスが変わります）
+// =====================================================
+const TILE = 40;   // 1マスのサイズ（px）
+const COLS = 20;   // 横のマス数
+const ROWS = 13;   // 縦のマス数
+
+const START_MONEY = 150;
+const MAX_PER_TOWER = 10;  // タワーは種類ごとに10個まで
+const INCOME_RATE = 0.5;   // お金の取得倍率（1 で元の量、0.5 で半分）
+
+// タワーの種類
+const TOWER_TYPES = {
+  basic:  { name: '基本砲台', key: '1', cost: 50,   range: 110, cooldown: 0.6, damage: 10, splash: 0,  speed: 360, color: '#e0b341',
+            desc: 'バランス型。安価で数を揃えやすい。' },
+  splash: { name: '範囲砲台', key: '2', cost: 200,  range: 120, cooldown: 1.2, damage: 22, splash: 55, speed: 280, color: '#e07a41',
+            desc: '着弾点の周りをまとめて攻撃。群れに強い。' },
+  sniper: { name: '狙撃砲台', key: '3', cost: 1000, range: 230, cooldown: 1.6, damage: 90, splash: 0,  speed: 800, color: '#9b7be0',
+            desc: '射程が長く一発が重い。ボスや重装の敵向け。' },
+};
+
+// 敵の種類（hpMul/speedMul は基準値に対する倍率。reward は取得倍率をかける前の基準値）
+const ENEMY_TYPES = {
+  normal: { name: '通常', hpMul: 1,   speedMul: 1,    radius: 11, color: '#b8423a', reward: 8,   score: 10,  atk: 6,
+            desc: '標準的な敵。数が多い。' },
+  fast:   { name: '高速', hpMul: 0.6, speedMul: 1.7,  radius: 8,  color: '#e8913a', reward: 10,  score: 15,  atk: 4,
+            desc: '足が速いがHPは低め。2ウェーブ目から登場。' },
+  tank:   { name: '重装', hpMul: 2.8, speedMul: 0.65, radius: 14, color: '#7a4fa0', reward: 22,  score: 35,  atk: 10,
+            desc: '足が遅くHPが高い。攻撃も強め。3ウェーブ目から登場。' },
+  boss:   { name: 'ボス', hpMul: 14,  speedMul: 0.5,  radius: 22, color: '#2b2b2b', reward: 150, score: 500, atk: 25,
+            desc: '5ウェーブごとに登場。HPが非常に高く、関門を大きく削る。ミサイルは最大HPの30%。' },
+};
+
+// 味方の兵士（同時に出せる合計は SOLDIER_MAX まで）
+const SOLDIER_MAX = 10;
+const SOLDIER_TYPES = {
+  infantry: { name: '歩兵', key: '4', cost: 30, hp: 45,  damage: 5,  cooldown: 0.8, speed: 70,  range: 26,  color: '#4aa3df', radius: 8,
+              desc: '標準的な兵士。' },
+  shield:   { name: '盾兵', key: '5', cost: 60, hp: 120, damage: 3,  cooldown: 1.0, speed: 55,  range: 26,  color: '#7d97aa', radius: 10,
+              desc: 'HPが高く足止め向き。攻撃は弱い。' },
+  archer:   { name: '弓兵', key: '6', cost: 50, hp: 25,  damage: 6,  cooldown: 0.7, speed: 65,  range: 100, color: '#5ac28a', radius: 7,
+              desc: '離れた敵を射撃する。HPは低い。' },
+  cavalry:  { name: '騎兵', key: '7', cost: 80, hp: 55,  damage: 12, cooldown: 0.9, speed: 130, range: 26,  color: '#e0c14a', radius: 9,
+              desc: '足が速く攻撃力が高い。' },
+};
+
+// ミサイル
+const MISSILE = { cost: 60, speed: 900, bossRatio: 0.3, pickRadius: 32 };
+
+// 関門（道の上の拠点）。cell は道の上のマス [列, 行]。hp は耐久力。
+// 敵は関門の手前で止まって攻撃します。最後の関門が壊れるとゲームオーバー。
+const GATES = [
+  { name: '第一関門', cell: [8, 4],  hp: 100 },
+  { name: '第二関門', cell: [10, 7], hp: 150 },
+  { name: '最終関門', cell: [6, 11], hp: 200 },
+];
+const GATE_STOP = 24;          // 敵が関門の手前で止まる距離（px）
+const GATE_MAX_ATTACKERS = 3;  // 1つの関門を同時に攻撃できる敵の数
+
+// =====================================================
+//  敵が通る道（マス目の座標 [列, 行]）。画面の外から入って外へ出ます
+// =====================================================
+const GRID_PATH = [
+  [-1, 1], [17, 1], [17, 4], [2, 4], [2, 7], [17, 7], [17, 10], [6, 10], [6, 13],
+];
+
+// マス座標 → ピクセル座標（マスの中心）
+const WAYPOINTS = GRID_PATH.map(([c, r]) => ({
+  x: c * TILE + TILE / 2,
+  y: r * TILE + TILE / 2,
+}));
+
+// 道になっているマスを "列,行" で記録（タワーを置けない場所の判定用）
+const pathCells = new Set();
+for (let i = 0; i < GRID_PATH.length - 1; i++) {
+  let [c, r] = GRID_PATH[i];
+  const [c2, r2] = GRID_PATH[i + 1];
+  const dc = Math.sign(c2 - c);
+  const dr = Math.sign(r2 - r);
+  while (true) {
+    pathCells.add(c + ',' + r);
+    if (c === c2 && r === r2) break;
+    c += dc;
+    r += dr;
+  }
+}
+
+// =====================================================
+//  計算用の関数
+// =====================================================
+function enemyHp(kind, wave) {
+  return Math.round((28 + wave * 14) * ENEMY_TYPES[kind].hpMul);
+}
+function enemySpeed(kind, wave) {
+  return Math.min(55 + wave * 3, 110) * ENEMY_TYPES[kind].speedMul;
+}
+function rewardOf(kind) {
+  return Math.round(ENEMY_TYPES[kind].reward * INCOME_RATE);
+}
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+// =====================================================
+//  画面の部品
+// =====================================================
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const els = {
+  score: document.getElementById('score'),
+  best: document.getElementById('best'),
+  money: document.getElementById('money'),
+  wave: document.getElementById('wave'),
+  spawned: document.getElementById('spawned'),
+  alive: document.getElementById('alive'),
+  kills: document.getElementById('kills'),
+  soldiers: document.getElementById('soldiers'),
+  infoTop: document.getElementById('infoTop'),
+  infoEnemies: document.getElementById('infoEnemies'),
+};
+const nextWaveBtn = document.getElementById('nextWave');
+const resetBtn = document.getElementById('reset');
+const toolbar = document.getElementById('toolbar');
+const gatesBox = document.getElementById('gates');
+
+let toolHover = null; // ツールバーのボタンにマウスが乗っているとき、そのキー
+
+// ツールバーのボタンを作る
+const toolButtons = {};
+function makeButton(id, onClick) {
+  const b = document.createElement('button');
+  b.addEventListener('click', e => { onClick(); e.currentTarget.blur(); });
+  b.addEventListener('mouseenter', () => { toolHover = id; });
+  b.addEventListener('mouseleave', () => { toolHover = null; });
+  toolbar.appendChild(b);
+  toolButtons[id] = b;
+}
+for (const key in TOWER_TYPES) makeButton(key, () => select(key));
+makeButton('missile', () => select('missile'));
+for (const key in SOLDIER_TYPES) makeButton(key, () => deploySoldier(key));
+
+// 関門のHP表示を作る
+const gateEls = GATES.map(g => {
+  const wrap = document.createElement('div');
+  wrap.className = 'gate';
+  wrap.innerHTML = '<span class="gname">' + g.name + '</span><div class="bar"><div class="fill"></div></div><span class="ghp"></span>';
+  gatesBox.appendChild(wrap);
+  return { wrap, fill: wrap.querySelector('.fill'), hp: wrap.querySelector('.ghp') };
+});
+
+// =====================================================
+//  ゲームの状態
+// =====================================================
+let state;
+let selected = 'basic';   // いま選んでいるもの（タワーの種類 or 'missile'）
+let lastTower = 'basic';  // ミサイルを使った後に戻すタワー
+let mouse = null;         // マウス位置 {x, y, c, r}
+let best = loadBest();
+
+function loadBest() {
+  try { return Number(localStorage.getItem('td_best')) || 0; } catch (e) { return 0; }
+}
+function saveBest() {
+  try { localStorage.setItem('td_best', String(best)); } catch (e) { /* 保存できなくても続行 */ }
+}
+
+function resetGame() {
+  state = {
+    money: START_MONEY,
+    score: 0,
+    kills: 0,
+    wave: 0,
+    waveActive: false,
+    queue: [],        // これから出てくる敵の種類リスト
+    waveTotal: 0,     // そのウェーブの敵の総数
+    spawnTimer: 0,
+    enemies: [],
+    towers: [],
+    bullets: [],
+    soldiers: [],
+    missiles: [],
+    effects: [],      // 爆発や射撃の線など、見た目の演出
+    gates: GATES.map(g => ({
+      name: g.name,
+      x: g.cell[0] * TILE + TILE / 2,
+      y: g.cell[1] * TILE + TILE / 2,
+      hp: g.hp,
+      maxHp: g.hp,
+      alive: true,
+    })),
+    banner: null,
+    over: false,
+  };
+  updateHud();
+}
+
+function select(sel) {
+  selected = sel;
+  if (sel !== 'missile') lastTower = sel;
+}
+
+// =====================================================
+//  ウェーブ開始・敵の出現
+// =====================================================
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+function startWave() {
+  if (state.waveActive || state.over) return;
+  state.wave++;
+  const w = state.wave;
+
+  // このウェーブに出てくる敵のリストを作る
+  const q = [];
+  for (let i = 0; i < 6 + w * 2; i++) q.push('normal');
+  if (w >= 2) for (let i = 0; i < w; i++) q.push('fast');
+  if (w >= 3) for (let i = 0; i < Math.floor(w / 2); i++) q.push('tank');
+  shuffle(q);
+  // 5ウェーブごとにボスが最後に登場
+  const bossWave = (w % 5 === 0);
+  if (bossWave) for (let i = 0; i < w / 5; i++) q.push('boss');
+
+  state.queue = q;
+  state.waveTotal = q.length;
+  state.spawnTimer = 0;
+  state.waveActive = true;
+  state.banner = { text: bossWave ? 'ボスウェーブ！' : 'ウェーブ ' + w, t: bossWave ? 2.5 : 1.5 };
+}
+
+function spawnEnemy(kind) {
+  const hp = enemyHp(kind, state.wave);
+  state.enemies.push({
+    kind, hp, maxHp: hp,
+    speed: enemySpeed(kind, state.wave),
+    x: WAYPOINTS[0].x, y: WAYPOINTS[0].y,
+    target: 1,        // 次に向かうウェイポイントの番号
+    dead: false,
+    fighting: null,   // 戦っている兵士
+    atGate: null,     // 止まっている関門
+    gateAttacker: false,
+    atkCd: 0,
+  });
+}
+
+// =====================================================
+//  ダメージ処理
+// =====================================================
+function damageEnemy(e, dmg) {
+  if (e.dead) return;
+  e.hp -= dmg;
+  if (e.hp <= 0) {
+    e.dead = true;
+    const t = ENEMY_TYPES[e.kind];
+    state.money += rewardOf(e.kind);
+    state.score += t.score;
+    state.kills++;
+    addEffect(e.x, e.y, t.radius + 10, 'rgba(255,255,255,0.6)');
+  }
+}
+
+function damageGate(g, dmg) {
+  if (!g.alive) return;
+  g.hp -= dmg;
+  if (g.hp <= 0) {
+    g.hp = 0;
+    g.alive = false;
+    addEffect(g.x, g.y, 55, 'rgba(255,120,60,0.6)');
+    state.banner = { text: g.name + ' 陥落！', t: 2 };
+  }
+}
+
+function addEffect(x, y, r, color) {
+  state.effects.push({ kind: 'circle', x, y, r, color, t: 0.25, max: 0.25 });
+}
+function addLine(x, y, x2, y2, color) {
+  state.effects.push({ kind: 'line', x, y, x2, y2, color, t: 0.12, max: 0.12 });
+}
+
+// =====================================================
+//  配置・使用（クリック操作）
+// =====================================================
+function towerCount(key) {
+  return state.towers.filter(t => t.type === key).length;
+}
+
+function canPlace(c, r) {
+  if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return false;
+  if (pathCells.has(c + ',' + r)) return false;                      // 道の上はNG
+  if (state.towers.some(t => t.c === c && t.r === r)) return false; // 既にタワーがある
+  return true;
+}
+
+function placeTower(p) {
+  const type = TOWER_TYPES[selected];
+  if (!type) return;
+  if (!canPlace(p.c, p.r)) return;
+  if (state.money < type.cost) return;
+  if (towerCount(selected) >= MAX_PER_TOWER) return;
+  state.money -= type.cost;
+  state.towers.push({
+    type: selected, c: p.c, r: p.r,
+    x: p.c * TILE + TILE / 2,
+    y: p.r * TILE + TILE / 2,
+    cooldown: 0,
+    angle: 0,
+  });
+}
+
+function fireMissile(p) {
+  if (state.money < MISSILE.cost) return;
+  // クリック位置にいちばん近い敵を探す
+  let target = null;
+  let bd = MISSILE.pickRadius;
+  for (const e of state.enemies) {
+    if (e.dead) continue;
+    const d = Math.hypot(e.x - p.x, e.y - p.y);
+    if (d <= bd) { target = e; bd = d; }
+  }
+  if (!target) return; // 敵が近くにいなければ使わない
+  state.money -= MISSILE.cost;
+  state.missiles.push({ x: target.x, y: -20, target, gone: false }); // 画面の上から降ってくる
+  select(lastTower);
+}
+
+function deploySoldier(kind) {
+  if (state.over) return;
+  const st = SOLDIER_TYPES[kind];
+  if (state.money < st.cost) return;
+  if (state.soldiers.length >= SOLDIER_MAX) return;
+  const last = WAYPOINTS.length - 1;
+  state.money -= st.cost;
+  state.soldiers.push({
+    type: kind,
+    x: WAYPOINTS[last].x, y: WAYPOINTS[last].y,
+    hp: st.hp,
+    idx: last - 1,   // 向かっているウェイポイント
+    dir: -1,         // -1: スタート方向へ / +1: ゴール方向へ
+    fighting: null,
+    cd: 0,
+  });
+}
+
+// canvas が縮小表示されていても正しい位置を取れるように補正
+function getPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+  return { x, y, c: Math.floor(x / TILE), r: Math.floor(y / TILE) };
+}
+
+canvas.addEventListener('mousemove', e => { mouse = getPos(e); });
+canvas.addEventListener('mouseleave', () => { mouse = null; });
+canvas.addEventListener('click', e => {
+  if (state.over) return;
+  const p = getPos(e);
+  if (selected === 'missile') fireMissile(p);
+  else placeTower(p);
+});
+
+nextWaveBtn.addEventListener('click', e => { startWave(); e.currentTarget.blur(); });
+resetBtn.addEventListener('click', e => { resetGame(); e.currentTarget.blur(); });
+
+window.addEventListener('keydown', e => {
+  for (const key in TOWER_TYPES) {
+    if (e.key === TOWER_TYPES[key].key) select(key);
+  }
+  for (const key in SOLDIER_TYPES) {
+    if (e.key === SOLDIER_TYPES[key].key) deploySoldier(key);
+  }
+  if (e.key === 'm' || e.key === 'M') select('missile');
+  if (e.key === 'n' || e.key === 'N') startWave();
+});
+
+// =====================================================
+//  更新処理（dt = 前回からの経過秒数）
+// =====================================================
+function update(dt) {
+  if (state.over) return;
+
+  // --- 敵の出現 ---
+  if (state.queue.length > 0) {
+    state.spawnTimer -= dt;
+    if (state.spawnTimer <= 0) {
+      const kind = state.queue.shift();
+      spawnEnemy(kind);
+      state.spawnTimer = (kind === 'boss') ? 1.5 : 0.7;
+    }
+  }
+
+  // --- 敵と兵士の「ぶつかり」を判定 ---
+  for (const s of state.soldiers) {
+    s.fighting = null;
+    let bd = SOLDIER_TYPES[s.type].range;
+    for (const e of state.enemies) {
+      if (e.dead) continue;
+      const d = dist(s, e);
+      if (d <= bd) { s.fighting = e; bd = d; }
+    }
+  }
+  const CONTACT = 26; // 敵が兵士と接触したとみなす距離
+  for (const e of state.enemies) {
+    e.fighting = null;
+    let bd = CONTACT + ENEMY_TYPES[e.kind].radius * 0.5;
+    for (const s of state.soldiers) {
+      if (s.hp <= 0) continue;
+      const d = dist(s, e);
+      if (d <= bd) { e.fighting = s; bd = d; }
+    }
+  }
+
+  // --- 関門の前にいる敵を調べる（近い順に数体だけが攻撃できる） ---
+  for (const e of state.enemies) { e.atGate = null; e.gateAttacker = false; }
+  for (const g of state.gates) {
+    if (!g.alive) continue;
+    const near = state.enemies
+      .filter(e => !e.dead && dist(e, g) <= GATE_STOP)
+      .sort((a, b) => dist(a, g) - dist(b, g));
+    near.forEach((e, i) => {
+      e.atGate = g;
+      e.gateAttacker = i < GATE_MAX_ATTACKERS;
+    });
+  }
+
+  // --- 敵の行動（兵士と戦闘中・関門の前では止まる） ---
+  for (const e of state.enemies) {
+    if (e.dead) continue;
+    const t = ENEMY_TYPES[e.kind];
+
+    if (e.fighting) {
+      e.atkCd -= dt;
+      if (e.atkCd <= 0) {
+        e.fighting.hp -= t.atk;
+        e.atkCd = 0.8;
+      }
+      continue;
+    }
+    if (e.atGate) {
+      if (e.gateAttacker) {
+        e.atkCd -= dt;
+        if (e.atkCd <= 0) {
+          damageGate(e.atGate, t.atk);
+          e.atkCd = 0.8;
+        }
+      }
+      continue;
+    }
+
+    e.atkCd = 0;
+    const wp = WAYPOINTS[e.target];
+    const dx = wp.x - e.x;
+    const dy = wp.y - e.y;
+    const d = Math.hypot(dx, dy);
+    const step = e.speed * dt;
+    if (d <= step) {
+      e.x = wp.x;
+      e.y = wp.y;
+      e.target++;
+      if (e.target >= WAYPOINTS.length) {
+        // 通常は最終関門で止まるので来ないはずだが、念のため最終関門を破壊扱いにする
+        e.dead = true;
+        damageGate(state.gates[state.gates.length - 1], 99999);
+      }
+    } else {
+      e.x += (dx / d) * step;
+      e.y += (dy / d) * step;
+    }
+  }
+
+  // --- 兵士の行動（戦闘 or 道をパトロール） ---
+  for (const s of state.soldiers) {
+    if (s.hp <= 0) continue;
+    const st = SOLDIER_TYPES[s.type];
+    if (s.fighting && !s.fighting.dead) {
+      s.cd -= dt;
+      if (s.cd <= 0) {
+        if (st.range > 40) addLine(s.x, s.y, s.fighting.x, s.fighting.y, '#bff5d6'); // 弓兵の射撃線
+        damageEnemy(s.fighting, st.damage);
+        s.cd = st.cooldown;
+      }
+      continue;
+    }
+    const wp = WAYPOINTS[s.idx];
+    const dx = wp.x - s.x;
+    const dy = wp.y - s.y;
+    const d = Math.hypot(dx, dy);
+    const step = st.speed * dt;
+    if (d <= step) {
+      s.x = wp.x;
+      s.y = wp.y;
+      // 端まで行ったら折り返す
+      let next = s.idx + s.dir;
+      if (next < 0 || next >= WAYPOINTS.length) {
+        s.dir = -s.dir;
+        next = s.idx + s.dir;
+      }
+      s.idx = next;
+    } else {
+      s.x += (dx / d) * step;
+      s.y += (dy / d) * step;
+    }
+  }
+
+  // --- タワーの攻撃 ---
+  for (const t of state.towers) {
+    t.cooldown -= dt;
+    if (t.cooldown > 0) continue;
+    const type = TOWER_TYPES[t.type];
+
+    // 射程内でいちばん近い敵を狙う
+    let target = null;
+    let bd = type.range;
+    for (const e of state.enemies) {
+      if (e.dead) continue;
+      const d = dist(t, e);
+      if (d <= bd) { target = e; bd = d; }
+    }
+    if (target) {
+      t.angle = Math.atan2(target.y - t.y, target.x - t.x);
+      state.bullets.push({
+        x: t.x, y: t.y, target,
+        damage: type.damage, splash: type.splash, speed: type.speed,
+        gone: false,
+      });
+      t.cooldown = type.cooldown;
+    }
+  }
+
+  // --- 弾の移動と命中 ---
+  for (const b of state.bullets) {
+    if (b.target.dead) { b.gone = true; continue; }
+    const dx = b.target.x - b.x;
+    const dy = b.target.y - b.y;
+    const d = Math.hypot(dx, dy);
+    const step = b.speed * dt;
+    if (d <= step + 6) {
+      if (b.splash > 0) {
+        // 範囲攻撃：着弾点の周りの敵すべてにダメージ
+        const cx = b.target.x, cy = b.target.y;
+        for (const e of state.enemies) {
+          if (!e.dead && Math.hypot(e.x - cx, e.y - cy) <= b.splash) damageEnemy(e, b.damage);
+        }
+        addEffect(cx, cy, b.splash, 'rgba(224,122,65,0.5)');
+      } else {
+        damageEnemy(b.target, b.damage);
+      }
+      b.gone = true;
+    } else {
+      b.x += (dx / d) * step;
+      b.y += (dy / d) * step;
+    }
+  }
+
+  // --- ミサイルの移動と命中 ---
+  for (const m of state.missiles) {
+    if (m.target.dead) { m.gone = true; continue; }
+    const dx = m.target.x - m.x;
+    const dy = m.target.y - m.y;
+    const d = Math.hypot(dx, dy);
+    const step = MISSILE.speed * dt;
+    if (d <= step + 8) {
+      const e = m.target;
+      if (e.kind === 'boss') damageEnemy(e, Math.ceil(e.maxHp * MISSILE.bossRatio));
+      else damageEnemy(e, e.maxHp); // 通常の敵は一撃
+      addEffect(e.x, e.y, 45, 'rgba(255,80,60,0.6)');
+      m.gone = true;
+    } else {
+      m.x += (dx / d) * step;
+      m.y += (dy / d) * step;
+    }
+  }
+
+  // --- 演出・バナーの時間経過 ---
+  for (const f of state.effects) f.t -= dt;
+  if (state.banner) {
+    state.banner.t -= dt;
+    if (state.banner.t <= 0) state.banner = null;
+  }
+
+  // --- 不要になったものを取り除く ---
+  state.enemies = state.enemies.filter(e => !e.dead);
+  state.bullets = state.bullets.filter(b => !b.gone);
+  state.missiles = state.missiles.filter(m => !m.gone);
+  state.soldiers = state.soldiers.filter(s => s.hp > 0);
+  state.effects = state.effects.filter(f => f.t > 0);
+
+  // --- ゲームオーバー判定（最終関門が壊れたら終了） ---
+  if (!state.gates[state.gates.length - 1].alive) {
+    state.over = true;
+    if (state.score > best) { best = state.score; saveBest(); }
+  }
+
+  // --- ウェーブ終了判定 ---
+  if (state.waveActive && state.queue.length === 0 && state.enemies.length === 0 && !state.over) {
+    state.waveActive = false;
+    const bonus = Math.round((30 + state.wave * 5) * INCOME_RATE);
+    state.money += bonus;
+    state.score += state.wave * 100;
+    state.banner = { text: 'ウェーブクリア！ +' + bonus + 'G', t: 1.8 };
+  }
+}
+
+// =====================================================
+//  補足パネル（隅の情報表示）
+// =====================================================
+function row(label, value) {
+  return '<div class="row"><span>' + label + '</span><b>' + value + '</b></div>';
+}
+function dot(color) {
+  return '<span class="dot" style="background:' + color + '"></span>';
+}
+
+function towerInfo(key) {
+  const t = TOWER_TYPES[key];
+  return '<h3>' + dot(t.color) + t.name + '</h3>'
+    + row('価格', t.cost + 'G')
+    + row('攻撃力', t.damage + (t.splash ? '（範囲 半径' + t.splash + '）' : ''))
+    + row('射程', t.range)
+    + row('連射間隔', t.cooldown + '秒')
+    + row('秒間ダメージ', (t.damage / t.cooldown).toFixed(1))
+    + row('設置数', towerCount(key) + ' / ' + MAX_PER_TOWER)
+    + '<div class="note">' + t.desc + '</div>';
+}
+
+function soldierTypeInfo(key) {
+  const s = SOLDIER_TYPES[key];
+  return '<h3>' + dot(s.color) + s.name + '</h3>'
+    + row('価格', s.cost + 'G')
+    + row('HP', s.hp)
+    + row('攻撃力', s.damage)
+    + row('攻撃間隔', s.cooldown + '秒')
+    + row('攻撃距離', s.range > 40 ? s.range + '（遠距離）' : '近接')
+    + row('移動速度', s.speed)
+    + '<div class="note">' + s.desc + '</div>';
+}
+
+function missileInfo() {
+  return '<h3>' + dot('#ff4a3a') + 'ミサイル</h3>'
+    + row('価格', MISSILE.cost + 'G')
+    + row('通常の敵', '一撃で撃破')
+    + row('ボス', '最大HPの' + Math.round(MISSILE.bossRatio * 100) + '%')
+    + '<div class="note">選んでから敵をクリック。敵の近くをクリックしないと消費しません。</div>';
+}
+
+function toolInfo(key) {
+  if (TOWER_TYPES[key]) return towerInfo(key);
+  if (SOLDIER_TYPES[key]) return soldierTypeInfo(key);
+  if (key === 'missile') return missileInfo();
+  return '';
+}
+
+function enemyInfo(e) {
+  const t = ENEMY_TYPES[e.kind];
+  return '<h3>' + dot(t.color) + t.name + '（場内の敵）</h3>'
+    + row('HP', Math.max(0, Math.ceil(e.hp)) + ' / ' + e.maxHp)
+    + row('速さ', Math.round(e.speed))
+    + row('攻撃力', t.atk)
+    + row('倒した報酬', rewardOf(e.kind) + 'G / ' + t.score + '点')
+    + '<div class="note">' + t.desc + '</div>';
+}
+
+function soldierInfo(s) {
+  const st = SOLDIER_TYPES[s.type];
+  return '<h3>' + dot(st.color) + st.name + '（味方）</h3>'
+    + row('HP', Math.max(0, Math.ceil(s.hp)) + ' / ' + st.hp)
+    + row('攻撃力', st.damage)
+    + '<div class="note">' + st.desc + '</div>';
+}
+
+function gateInfo(g) {
+  return '<h3>' + dot('#a58d68') + g.name + '</h3>'
+    + row('HP', g.hp + ' / ' + g.maxHp)
+    + '<div class="note">' + (g.alive
+      ? '敵はここで止まって攻撃します（同時に' + GATE_MAX_ATTACKERS + '体まで）。'
+      : '陥落しました。敵はここを通過できます。') + '</div>';
+}
+
+// いまマウスが指しているものに応じて、上段の表示を決める
+function infoTopHtml() {
+  if (toolHover) return toolInfo(toolHover);
+  if (mouse && !state.over) {
+    for (const e of state.enemies) {
+      if (dist(e, mouse) <= ENEMY_TYPES[e.kind].radius + 6) return enemyInfo(e);
+    }
+    for (const s of state.soldiers) {
+      if (dist(s, mouse) <= SOLDIER_TYPES[s.type].radius + 6) return soldierInfo(s);
+    }
+    for (const g of state.gates) {
+      if (dist(g, mouse) <= 22) return gateInfo(g);
+    }
+    const t = state.towers.find(t => t.c === mouse.c && t.r === mouse.r);
+    if (t) return towerInfo(t.type);
+  }
+  return toolInfo(selected);
+}
+
+// 敵の一覧（下段）。ウェーブごとの強さを表示
+function enemyListHtml() {
+  const w = state.waveActive ? state.wave : state.wave + 1;
+  let h = '<h3 style="margin-top:10px">敵の情報（第' + w + '波の値）</h3>';
+  for (const key of ['normal', 'fast', 'tank', 'boss']) {
+    const t = ENEMY_TYPES[key];
+    h += '<div class="item"><b>' + dot(t.color) + t.name + '</b>'
+      + row('HP', enemyHp(key, w))
+      + row('速さ', Math.round(enemySpeed(key, w)))
+      + row('攻撃力', t.atk)
+      + row('倒した報酬', rewardOf(key) + 'G / ' + t.score + '点')
+      + '<div class="note">' + t.desc + '</div></div>';
+  }
+  return h;
+}
+
+let lastTopHtml = '';
+let lastEnemiesHtml = '';
+function updateInfoPanel() {
+  const top = infoTopHtml();
+  if (top !== lastTopHtml) { els.infoTop.innerHTML = top; lastTopHtml = top; }
+  const list = enemyListHtml();
+  if (list !== lastEnemiesHtml) { els.infoEnemies.innerHTML = list; lastEnemiesHtml = list; }
+}
+
+// =====================================================
+//  HUD（画面上の数字）の更新
+// =====================================================
+function setText(el, text) {
+  if (el.textContent !== text) el.textContent = text;
+}
+
+function updateHud() {
+  setText(els.score, state.score.toLocaleString());
+  setText(els.best, 'ベスト ' + Math.max(best, state.score).toLocaleString());
+  setText(els.money, String(state.money));
+  setText(els.wave, String(state.wave));
+  const spawned = state.waveTotal - state.queue.length;
+  setText(els.spawned, state.wave === 0 ? '-' : spawned + ' / ' + state.waveTotal);
+  setText(els.alive, String(state.enemies.length));
+  setText(els.kills, String(state.kills));
+  setText(els.soldiers, state.soldiers.length + ' / ' + SOLDIER_MAX);
+  nextWaveBtn.disabled = state.waveActive || state.over;
+
+  // 関門のHP
+  state.gates.forEach((g, i) => {
+    const el = gateEls[i];
+    el.fill.style.width = (g.hp / g.maxHp * 100) + '%';
+    setText(el.hp, g.hp + ' / ' + g.maxHp);
+    el.wrap.classList.toggle('down', !g.alive);
+  });
+
+  // ツールバーのボタン表示
+  for (const key in TOWER_TYPES) {
+    const t = TOWER_TYPES[key];
+    const n = towerCount(key);
+    const b = toolButtons[key];
+    setText(b, t.key + ' ' + t.name + ' ' + t.cost + 'G (' + n + '/' + MAX_PER_TOWER + ')');
+    b.classList.toggle('active', selected === key);
+    b.classList.toggle('poor', state.money < t.cost || n >= MAX_PER_TOWER);
+  }
+  const mb = toolButtons.missile;
+  setText(mb, 'M ミサイル ' + MISSILE.cost + 'G');
+  mb.classList.toggle('active', selected === 'missile');
+  mb.classList.toggle('poor', state.money < MISSILE.cost);
+
+  for (const key in SOLDIER_TYPES) {
+    const s = SOLDIER_TYPES[key];
+    const b = toolButtons[key];
+    setText(b, s.key + ' ' + s.name + ' ' + s.cost + 'G');
+    b.classList.toggle('poor', state.money < s.cost || state.soldiers.length >= SOLDIER_MAX);
+  }
+
+  updateInfoPanel();
+}
+
+// =====================================================
+//  描画処理
+// =====================================================
+function hpBar(x, y, w, ratio) {
+  ctx.fillStyle = '#222';
+  ctx.fillRect(x - w / 2, y, w, 4);
+  ctx.fillStyle = '#7fd36b';
+  ctx.fillRect(x - w / 2, y, w * Math.max(0, ratio), 4);
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.textAlign = 'center';
+
+  // マス目（草地と道）
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const isPath = pathCells.has(c + ',' + r);
+      ctx.fillStyle = isPath ? '#c9b27c' : ((c + r) % 2 === 0 ? '#4d7a4a' : '#4a7547');
+      ctx.fillRect(c * TILE, r * TILE, TILE, TILE);
+    }
+  }
+
+  // 設置プレビュー（射程も表示）
+  if (mouse && !state.over && selected !== 'missile') {
+    const type = TOWER_TYPES[selected];
+    if (canPlace(mouse.c, mouse.r)) {
+      const cx = mouse.c * TILE + TILE / 2;
+      const cy = mouse.r * TILE + TILE / 2;
+      const ok = state.money >= type.cost && towerCount(selected) < MAX_PER_TOWER;
+      ctx.fillStyle = ok ? 'rgba(255,255,255,0.25)' : 'rgba(255,60,60,0.3)';
+      ctx.fillRect(mouse.c * TILE, mouse.r * TILE, TILE, TILE);
+      ctx.beginPath();
+      ctx.arc(cx, cy, type.range, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.stroke();
+    }
+  }
+
+  // 関門
+  for (const g of state.gates) {
+    if (g.alive) {
+      ctx.fillStyle = '#6b5b45';
+      ctx.fillRect(g.x - 18, g.y - 18, 36, 36);
+      ctx.fillStyle = '#a58d68';
+      ctx.fillRect(g.x - 18, g.y - 18, 36, 9);
+      ctx.strokeStyle = '#2c241a';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(g.x - 18, g.y - 18, 36, 36);
+      ctx.lineWidth = 1;
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillText(g.name.replace('関門', ''), g.x, g.y + 9);
+      hpBar(g.x, g.y - 30, 44, g.hp / g.maxHp);
+      ctx.font = '11px sans-serif';
+      ctx.fillText(String(g.hp), g.x, g.y - 34);
+    } else {
+      // 陥落した関門（がれき）
+      ctx.fillStyle = 'rgba(60,50,40,0.7)';
+      ctx.fillRect(g.x - 16, g.y - 6, 32, 12);
+    }
+  }
+
+  // タワー
+  for (const t of state.towers) {
+    const type = TOWER_TYPES[t.type];
+    ctx.fillStyle = '#35495e';
+    ctx.fillRect(t.x - 15, t.y - 15, 30, 30);
+    ctx.strokeStyle = type.color;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(t.x, t.y);
+    ctx.lineTo(t.x + Math.cos(t.angle) * 18, t.y + Math.sin(t.angle) * 18);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.fillStyle = type.color;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, 9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 敵（HPバー付き）
+  for (const e of state.enemies) {
+    const t = ENEMY_TYPES[e.kind];
+    ctx.fillStyle = t.color;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, t.radius, 0, Math.PI * 2);
+    ctx.fill();
+    if (e.kind === 'boss') {
+      ctx.strokeStyle = '#ff4a3a';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.lineWidth = 1;
+    }
+    hpBar(e.x, e.y - t.radius - 8, t.radius * 2 + 4, e.hp / e.maxHp);
+  }
+
+  // 味方の兵士（種類ごとに色と文字が違う）
+  for (const s of state.soldiers) {
+    const st = SOLDIER_TYPES[s.type];
+    ctx.fillStyle = st.color;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, st.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = s.type === 'shield' ? 3 : 1;
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#10202a';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillText(st.name[0], s.x, s.y + 4);
+    hpBar(s.x, s.y - st.radius - 8, 20, s.hp / st.hp);
+  }
+
+  // 弾
+  for (const b of state.bullets) {
+    ctx.fillStyle = b.splash > 0 ? '#ffb070' : '#fff';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.splash > 0 ? 5 : 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ミサイル
+  for (const m of state.missiles) {
+    ctx.fillStyle = '#ff4a3a';
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffd75e';
+    ctx.beginPath();
+    ctx.arc(m.x, m.y - 8, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 爆発や射撃線の演出
+  for (const f of state.effects) {
+    ctx.globalAlpha = Math.max(0, f.t / f.max);
+    if (f.kind === 'line') {
+      ctx.strokeStyle = f.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(f.x, f.y);
+      ctx.lineTo(f.x2, f.y2);
+      ctx.stroke();
+      ctx.lineWidth = 1;
+    } else {
+      ctx.fillStyle = f.color;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ミサイル選択中：照準
+  if (mouse && !state.over && selected === 'missile') {
+    ctx.strokeStyle = state.money >= MISSILE.cost ? '#ff4a3a' : '#888';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(mouse.x, mouse.y, MISSILE.pickRadius, 0, Math.PI * 2);
+    ctx.moveTo(mouse.x - 40, mouse.y); ctx.lineTo(mouse.x + 40, mouse.y);
+    ctx.moveTo(mouse.x, mouse.y - 40); ctx.lineTo(mouse.x, mouse.y + 40);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  }
+
+  // ウェーブ開始・クリアのバナー
+  if (state.banner) {
+    ctx.globalAlpha = Math.min(1, state.banner.t);
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, canvas.height / 2 - 40, canvas.width, 80);
+    ctx.fillStyle = '#ffd75e';
+    ctx.font = 'bold 40px sans-serif';
+    ctx.fillText(state.banner.text, canvas.width / 2, canvas.height / 2 + 14);
+    ctx.globalAlpha = 1;
+  }
+
+  // ゲームオーバー表示
+  if (state.over) {
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 40px sans-serif';
+    ctx.fillText('最終関門が陥落しました', canvas.width / 2, canvas.height / 2 - 60);
+    ctx.fillStyle = '#ffd75e';
+    ctx.font = 'bold 72px sans-serif';
+    ctx.fillText(state.score.toLocaleString(), canvas.width / 2, canvas.height / 2 + 20);
+    ctx.fillStyle = '#fff';
+    ctx.font = '20px sans-serif';
+    ctx.fillText(
+      'ウェーブ ' + state.wave + ' ／ 撃破 ' + state.kills + ' ／ ベスト ' + best.toLocaleString(),
+      canvas.width / 2, canvas.height / 2 + 62
+    );
+  }
+}
+
+// =====================================================
+//  ゲームループ
+// =====================================================
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min((now - last) / 1000, 0.05); // タブ切替時の飛びを防ぐ
+  last = now;
+  update(dt);
+  updateHud();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+resetGame();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
